@@ -1,59 +1,127 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import Title from "@/components/Title"
+import { useState, useEffect, useRef } from "react";
+import Title from "@/components/Title";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Init Gemini
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
 
 export default function LorifyPage() {
-  const [activeMode, setActiveMode] = useState("savage")
-  const [question, setQuestion] = useState("")
-  const [response, setResponse] = useState("")
-  const [isRevealing, setIsRevealing] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
-  const recognitionRef = useRef(null)
+  const [activeMode, setActiveMode] = useState("savage");
+  const [question, setQuestion] = useState("");
+  const [response, setResponse] = useState("");
+  const [isRevealing, setIsRevealing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTalking, setIsTalking] = useState(false);
 
+  // 🆕 Model selection state
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash-lite");
+
+  const recognitionRef = useRef(null);
+
+  // --- Speech Recognition setup ---
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition()
-        recognitionRef.current.continuous = false
-        recognitionRef.current.interimResults = true
-        recognitionRef.current.lang = "en-US"
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = "en-US";
 
         recognitionRef.current.onresult = (event) => {
           const transcript = Array.from(event.results)
             .map((result) => result[0].transcript)
-            .join("")
-          setQuestion(transcript)
-        }
+            .join("");
+          setQuestion(transcript);
+        };
 
         recognitionRef.current.onend = () => {
-          setIsRecording(false)
-        }
+          setIsRecording(false);
+        };
       }
     }
-  }, [])
+  }, []);
 
   const toggleRecording = () => {
     if (!recognitionRef.current) {
-      alert("Speech recognition not supported in this browser.")
-      return
+      alert("Speech recognition not supported in this browser.");
+      return;
     }
-
     if (isRecording) {
-      recognitionRef.current.stop()
-      setIsRecording(false)
+      recognitionRef.current.stop();
+      setIsRecording(false);
     } else {
-      recognitionRef.current.start()
-      setIsRecording(true)
+      recognitionRef.current.start();
+      setIsRecording(true);
     }
-  }
+  };
 
+  // --- Text-to-Speech ---
+  const speakResponse = (text) => {
+    if ("speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+
+      utterance.onstart = () => setIsTalking(true);
+      utterance.onend = () => setIsTalking(false);
+
+      speechSynthesis.speak(utterance);
+    }
+  };
+
+  // --- Gemini call ---
+const handleReveal = async () => {
+  if (!question.trim()) return;
+  setIsRevealing(true);
+  try {
+    const model = genAI.getGenerativeModel({ model: selectedModel });
+
+    // --- Mode-specific system prompts ---
+    const modePrompts = {
+      savage: `You are a savage, unhinged roast comedian. Your job is to roast the user’s input in a brutal, sarcastic, and over-the-top way.
+- Always be funny, sharp, and meme-like.
+- Use modern slang and internet culture (💀, mid, NPC, starter pack, etc).
+- Keep responses short (1–3 sentences) so they hit hard and fast.
+- Avoid offensive or NSFW content — keep it fun, witty, and hackathon-friendly.
+User input: ${question}`,
+
+      storytelling: `You are a sarcastic storyteller. Take the user’s input and turn it into a short, satirical, and darkly funny mini-story.
+- Keep it short (3–5 sentences max).
+- Add witty exaggeration, dry humor, or ironic twists.
+- Make it sound like a parody of a bedtime story or fable.
+User input: ${question}`,
+
+      therapy: `You are a sarcastic, meme-style fake therapist. When the user shares a thought, emotion, or problem, respond like a therapist — but instead of empathy, use dry humor, playful cynicism, and witty roasts.
+- Responses should sound like ironic life advice.
+- Use short, punchy sentences (1–4).
+- Sprinkle in memes, emojis, or internet slang where it fits.
+- Never be cruel — keep it relatable and funny.
+User input: ${question}`,
+    };
+
+    const prompt = modePrompts[activeMode];
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
+    setResponse(text);
+    speakResponse(text); // Still uses browser TTS for now
+  } catch (err) {
+    console.error(err);
+    setResponse("⚠️ Something went wrong.");
+  } finally {
+    setIsRevealing(false);
+  }
+};
+  // --- Modes + Themes ---
   const modes = [
     { id: "savage", emoji: "😈", label: "Savage" },
     { id: "storytelling", emoji: "📖", label: "Storytelling" },
     { id: "therapy", emoji: "🛋️", label: "Therapy" },
-  ]
+  ];
 
   const themes = {
     savage: {
@@ -66,22 +134,27 @@ export default function LorifyPage() {
       buttonHover: "hover:shadow-red-500/70",
       input:
         "bg-red-950/50 border-red-500/30 text-red-100 placeholder-red-400/50 focus:border-red-400 focus:ring-red-500/30",
-      responseBox: "from-red-900/60 to-orange-900/60 border-red-400/30 shadow-red-500/20",
+      responseBox:
+        "from-red-900/60 to-orange-900/60 border-red-400/30 shadow-red-500/20",
       responseText: "text-red-100",
       micButton:
         "bg-red-800/50 hover:bg-red-700/50 text-red-100 hover:shadow-red-500/30",
     },
     storytelling: {
-      background: "bg-gradient-to-br from-sky-400 via-yellow-300 to-green-400",
+      background:
+        "bg-gradient-to-br from-sky-400 via-yellow-300 to-green-400",
       card: "bg-gradient-to-br from-yellow-100/95 to-sky-100/95 border-yellow-400/40 shadow-yellow-500/20",
-      avatar: "bg-gradient-to-br from-yellow-400 to-sky-400 shadow-yellow-500/60",
+      avatar:
+        "bg-gradient-to-br from-yellow-400 to-sky-400 shadow-yellow-500/60",
       avatarIcon: "📖",
       avatarGlow: "bg-yellow-400/40",
-      button: "from-yellow-500 to-sky-500 shadow-yellow-500/40 border-yellow-400",
+      button:
+        "from-yellow-500 to-sky-500 shadow-yellow-500/40 border-yellow-400",
       buttonHover: "hover:shadow-yellow-500/60",
       input:
         "bg-white/80 border-yellow-400/40 text-gray-800 placeholder-gray-500 focus:border-yellow-500 focus:ring-yellow-400/30",
-      responseBox: "from-yellow-50/80 to-sky-50/80 border-yellow-400/40 shadow-yellow-500/10",
+      responseBox:
+        "from-yellow-50/80 to-sky-50/80 border-yellow-400/40 shadow-yellow-500/10",
       responseText: "text-gray-800",
       micButton:
         "bg-yellow-400/50 hover:bg-yellow-500/60 text-gray-800 hover:shadow-yellow-500/30",
@@ -89,37 +162,24 @@ export default function LorifyPage() {
     therapy: {
       background: "bg-gradient-to-br from-slate-800 via-blue-900 to-slate-900",
       card: "bg-gradient-to-br from-slate-800/95 to-blue-900/95 border-blue-400/20 shadow-blue-500/10",
-      avatar: "bg-gradient-to-br from-blue-600 to-slate-600 shadow-blue-500/40",
+      avatar:
+        "bg-gradient-to-br from-blue-600 to-slate-600 shadow-blue-500/40",
       avatarIcon: "🧠",
       avatarGlow: "bg-blue-500/30",
       button: "from-blue-600 to-slate-600 shadow-blue-500/30 border-blue-400",
       buttonHover: "hover:shadow-blue-500/50",
       input:
         "bg-slate-900/50 border-blue-500/20 text-blue-100 placeholder-blue-400/40 focus:border-blue-400 focus:ring-blue-500/20",
-      responseBox: "from-slate-800/60 to-blue-900/60 border-blue-400/20 shadow-blue-500/10",
+      responseBox:
+        "from-slate-800/60 to-blue-900/60 border-blue-400/20 shadow-blue-500/10",
       responseText: "text-blue-100",
       micButton:
         "bg-slate-700/50 hover:bg-slate-600/50 text-blue-100 hover:shadow-blue-500/20",
     },
-  }
+  };
+  
 
-  const currentTheme = themes[activeMode]
-
-  const handleReveal = () => {
-    setIsRevealing(true)
-    setTimeout(() => {
-      const responses = {
-        savage:
-          "Listen up! The universe doesn't owe you anything. Get out there and take what's yours! 🔥",
-        storytelling:
-          "Once upon a time, in a land not so far away, your dreams began to sparkle with possibility... ✨",
-        therapy:
-          "I hear you. Let's explore what's really going on beneath the surface. Take a deep breath. 🧠",
-      }
-      setResponse(responses[activeMode])
-      setIsRevealing(false)
-    }, 1500)
-  }
+  const currentTheme = themes[activeMode];
 
   return (
     <div
@@ -131,41 +191,57 @@ export default function LorifyPage() {
         <Title />
 
         {/* Mode Switcher */}
-        <div className="mb-8">
-          <div className="flex gap-3 justify-center">
-            {modes.map((mode) => (
-              <button
-                key={mode.id}
-                onClick={() => {
-                  setActiveMode(mode.id)
-                  setResponse("")
-                }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-300 transform ${
-                  activeMode === mode.id
-                    ? `bg-gradient-to-r ${currentTheme.button} text-white shadow-lg border-2 scale-105`
-                    : "bg-gray-800/30 text-gray-600 hover:bg-gray-700/40 hover:text-gray-400 border-2 border-transparent hover:scale-105"
-                } active:scale-95`}
-              >
-                <span className="text-xl">{mode.emoji}</span>
-                <span>{mode.label}</span>
-              </button>
-            ))}
-          </div>
+        <div className="mb-6 flex gap-3 justify-center">
+          {modes.map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => {
+                setActiveMode(mode.id);
+                setResponse("");
+              }}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-300 transform ${
+                activeMode === mode.id
+                  ? `bg-gradient-to-r ${currentTheme.button} text-white shadow-lg border-2 scale-105`
+                  : "bg-gray-800/30 text-gray-600 hover:bg-gray-700/40 hover:text-gray-400 border-2 border-transparent hover:scale-105"
+              } active:scale-95`}
+            >
+              <span className="text-xl">{mode.emoji}</span>
+              <span>{mode.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* 🆕 Model Selector */}
+        <div className="mb-8 text-center">
+          <label className="font-semibold mr-2">Model:</label>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="border px-3 py-2 rounded"
+          >
+            <option value="gemini-2.5-flash-lite">⚡ Flash-Lite (fastest)</option>
+            <option value="gemini-2.5-flash">⚖️ Flash (balanced)</option>
+            <option value="gemini-2.5-pro">🧠 Pro (best reasoning)</option>
+          </select>
         </div>
 
         {/* Avatar */}
         <div className="flex justify-center mb-6">
           <div className="relative">
             <div
-              className={`w-32 h-32 rounded-full ${currentTheme.avatar} flex items-center justify-center text-6xl shadow-lg transition-all duration-700`}
+              className={`w-32 h-32 rounded-full ${currentTheme.avatar} flex items-center justify-center text-6xl shadow-lg transition-all duration-700 ${
+                isTalking ? "animate-bounce" : ""
+              }`}
             >
               {currentTheme.avatarIcon}
             </div>
-            <div className={`absolute inset-0 rounded-full ${currentTheme.avatarGlow} animate-ping`} />
+            <div
+              className={`absolute inset-0 rounded-full ${currentTheme.avatarGlow} animate-ping`}
+            />
           </div>
         </div>
 
-        {/* Response Box */}
+        {/* Response */}
         {response && (
           <div
             className={`bg-gradient-to-br ${currentTheme.responseBox} rounded-2xl p-6 border shadow-lg mb-6 animate-in fade-in slide-in-from-bottom-4 duration-500`}
@@ -196,7 +272,7 @@ export default function LorifyPage() {
           </div>
         )}
 
-        {/* Input + Buttons */}
+        {/* Input + Actions */}
         <div className="space-y-4">
           <textarea
             value={question}
@@ -224,11 +300,11 @@ export default function LorifyPage() {
                 : "💭 Reflect"}
             </button>
 
-            {/* Microphone Button */}
+            {/* Mic Button */}
             <button
               onClick={toggleRecording}
               className={`${currentTheme.micButton} font-medium py-4 px-6 rounded-full transition-all duration-300 shadow-lg hover:scale-105 active:scale-95 ${
-                isRecording ? "animate-pulse-mic" : ""
+                isRecording ? "animate-pulse" : ""
               }`}
             >
               🎤
@@ -237,5 +313,5 @@ export default function LorifyPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
