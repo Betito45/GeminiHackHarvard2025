@@ -1,1 +1,1 @@
-# GeminiHackHarvard2025
+# geminihackharvard2025
