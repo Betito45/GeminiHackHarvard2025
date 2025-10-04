@@ -8,7 +8,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.17.0",
     "@google/generative-ai": "^0.24.1",
+    "eleven": "^0.0.1",
     "next": "15.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",

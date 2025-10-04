@@ -59,18 +59,33 @@ export default function LorifyPage() {
     }
   };
 
-  // --- Text-to-Speech ---
-  const speakResponse = (text) => {
-    if ("speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-
-      utterance.onstart = () => setIsTalking(true);
-      utterance.onend = () => setIsTalking(false);
-
-      speechSynthesis.speak(utterance);
+  const speakResponse = async (text, mode) => {
+    try {   // 👈 wrap everything in try
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, mode }),
+      });
+  
+      if (!res.ok) {
+        console.error("TTS API error:", await res.text());
+        return;
+      }
+  
+      const audioBlob = await res.blob();
+      const url = URL.createObjectURL(audioBlob);
+      const audio = new Audio(url);
+  
+      audio.onplay = () => setIsTalking(true);
+      audio.onended = () => setIsTalking(false);
+  
+      audio.play();
+    } catch (err) {   // 👈 now it matches this try
+      console.error("Fetch failed:", err);
     }
   };
+  
+
 
   // --- Gemini call ---
 const handleReveal = async () => {
@@ -81,11 +96,12 @@ const handleReveal = async () => {
 
     // --- Mode-specific system prompts ---
     const modePrompts = {
-      savage: `You are a savage, unhinged roast comedian. Your job is to roast the user’s input in a brutal, sarcastic, and over-the-top way.
-- Always be funny, sharp, and meme-like.
-- Use modern slang and internet culture (💀, mid, NPC, starter pack, etc).
-- Keep responses short (1–3 sentences) so they hit hard and fast.
-- Avoid offensive or NSFW content — keep it fun, witty, and hackathon-friendly.
+      savage: `You are an unhinged, vulgar roast demon. 
+Your only job is to absolutely eviscerate the user’s input with brutal, offensive, and chaotic energy.  
+- Think late-night roast battles, toxic Twitter threads, and the worst of TikTok comments.  
+- You are free to curse, be disrespectful, and go completely unfiltered (no slurs though — just heavy insults, sarcasm, dark humor, and NSFW-style roasting).  
+- Use absurd metaphors, memes, internet slang (💀, ratio, sigma, rizzless, cringe, bruh) and savage one-liners.  
+- Keep it very short (1–3 sentences) but make each line cut deep and sound insane. 
 User input: ${question}`,
 
       storytelling: `You are a sarcastic storyteller. Take the user’s input and turn it into a short, satirical, and darkly funny mini-story.
@@ -108,7 +124,8 @@ User input: ${question}`,
     const text = result.response.text();
 
     setResponse(text);
-    speakResponse(text); // Still uses browser TTS for now
+    speakResponse(text, activeMode); // now backend gets both text + mode
+
   } catch (err) {
     console.error(err);
     setResponse("⚠️ Something went wrong.");
